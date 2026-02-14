@@ -1,0 +1,46 @@
+#!/bin/sh
+# A custom script that changes/adds the sort-key value of a systemd-boot loader entry, in order to move the latest kernel to the top of the systemd-boot menu.
+# Needs to be placed in: /usr/lib/kernel/install.d
+
+COMMAND="${1:?}"
+KERNEL_VERSION="${2:?}"
+ENTRY_DIR_ABS="${3:?}"
+KERNEL_IMAGE="$4"
+INITRD_OPTIONS_SHIFT=4
+
+ENTRY_TOKEN="${KERNEL_INSTALL_ENTRY_TOKEN:?}"
+BOOT_ROOT="${KERNEL_INSTALL_BOOT_ROOT:?}"
+
+LOADER_ENTRY="$BOOT_ROOT/loader/entries/$ENTRY_TOKEN-$KERNEL_VERSION.conf"
+LOADER_ENTRY_FALLBACK="$BOOT_ROOT/loader/entries/$ENTRY_TOKEN-$KERNEL_VERSION-fallback.conf"
+
+case "$COMMAND" in
+add)
+	printf 'Updating sort key for %s\n' "$KERNEL_VERSION"
+
+  # 6.18.1-... => 6018001
+	NEW_SORT_KEY=$(echo $KERNEL_VERSION | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | awk -F. '{printf "%d%03d%03d\n", $1, $2, $3}' | awk '{print "sort-" (100000000 - $1)}')
+	NEW_SORT_KEY_FALLBACK="${NEW_SORT_KEY}-fallback"
+
+	# Regular Loader-Entry
+	if [[ -f $LOADER_ENTRY ]]; then
+		printf 'Updating loader entry\n'
+		if grep -q "sort-key" $LOADER_ENTRY; then
+	    sed -i "s/sort-key[[:space:]]\+.*/sort-key	$NEW_SORT_KEY/g" $LOADER_ENTRY
+		else
+	    echo "sort-key	$NEW_SORT_KEY" >> $LOADER_ENTRY
+		fi
+	fi
+
+	# Fallback Loader-Entry
+	if [[ -f $LOADER_ENTRY_FALLBACK ]]; then
+		printf 'Updating fallback loader entry\n'
+		if grep -q "sort-key" $LOADER_ENTRY_FALLBACK; then
+	    sed -i "s/sort-key[[:space:]]\+.*/sort-key	$NEW_SORT_KEY_FALLBACK/g" $LOADER_ENTRY_FALLBACK
+		else
+	    echo "sort-key	$NEW_SORT_KEY_FALLBACK" >> $LOADER_ENTRY_FALLBACK
+		fi
+	fi
+
+	;;
+esac
